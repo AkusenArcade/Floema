@@ -1,0 +1,242 @@
+# Floema — plan
+
+Status: plan, 2026-11-26, from the brainstorm in `docs/questions.md`
+(Akusen's answers there are the source; this file only orders them). Not
+started. Pace: prototype first, the organic interface after.
+
+## 1. What it is
+
+A terminal emulator written on Genoma, opened as a `g.window`
+(`app_id = "dev.akusen.floema"`), for the AUR like Sinestesia and Rizoma.
+It follows Bioma's theme live through the shared theme file, as every
+Genoma app does, and has Bioma's look: no title bar, Bioma's fonts around
+the grid, Bioma's buttons and cells.
+
+Not another Alacritty clone. What it keeps from Alacritty is what Akusen
+chose it for: **his keyboard layout and dead keys**, and **speed**. What it
+adds is how a terminal is used:
+
+- **Each command is a capsule**: its prompt, its line, its output, marked
+  discreetly (seen above all under the pointer or while moving through the
+  commands). Its exit code is the rim's colour; its output folds and opens.
+- **What runs is alive**: the running command moves at the rate its output
+  comes; OSC 9;4 progress rises as a level; the bell is a pulse; a command
+  over 10 s that ends while the window is not focused is a Bioma
+  notification.
+- **The cursor travels** with a short trail, as Neovide's.
+- **Tabs** on top, as in Rizoma, one shell each, opened in the home folder.
+- **The folder's commands**: a small panel, called by a key, growing from
+  the cursor, that says what can be run where one stands.
+- **The folder is a thread** at the top of the tab, as Rizoma's path; a
+  press opens it in Rizoma.
+
+Bioma's principles hold here as in the shell: movement means something (the
+trail says where the cursor came from; the running capsule's movement is its
+output's rate; nothing moves at a fixed rate); colour says state; at rest
+the interface does not speak (the exit code only when not 0, the duration
+only past a few seconds, the time under the pointer); what opens grows from
+its origin.
+
+## 2. Scope
+
+**v1:**
+
+- A shell per tab; full-screen programs (vim, htop, the alternate screen)
+  take the window and give it back; Claude Code, which redraws inline, is a
+  living capsule as tall as it needs.
+- Runs without defects: vim, tmux, htop, Claude Code, ssh, git, builds with
+  a lot of output; vttest passes as far as Alacritty does.
+- Dead keys and the layout as in Alacritty: SCTK composes them (as the
+  launcher shows); Floema sends the composed character, never the dead key.
+- Moving by command: jump to the previous / next, fold, copy one command's
+  output, run it again, show only the failed ones.
+- Copy and paste: Ctrl+C copies when something is selected (the selection
+  then goes, so the next Ctrl+C interrupts), otherwise interrupts; Ctrl+V
+  pastes text, and is passed on to the program when the clipboard holds
+  only an image (Claude Code takes images so); Ctrl+Shift+C/V still work.
+  Several lines pasted ask first, unless the program takes bracketed paste.
+- Shift+Return sends ESC CR (Claude Code's new line); Ctrl+= / Ctrl+- /
+  Ctrl+0 for the font size.
+- Ctrl+click on a path or a URL: the browser, Rizoma, the default app.
+- The folder's commands panel (§6).
+- Look: padding 12; block cursor with its trail, blinking only after a
+  while idle; opacity is the compositor's; ANSI colours from Bioma's
+  palette, live; the grid in the theme's `mono` font, **Courier Prime** by
+  default; Bioma's fonts everywhere else.
+- Floema as the terminal Rizoma's F4, Bioma's launcher and Mod+T open,
+  when switched on (as Rizoma's DEFAULT).
+
+**After v1:** shells that survive the window (a small process holding the
+ptys, the window only a view; an option); the quick terminal dropping from
+a membrane of Bioma with a key; images (kitty graphics protocol, sixel).
+
+**Not planned:** an editor of its own for the command line (the shell keeps
+it: fish's completions and suggestions work as today); splits inside a tab
+(the compositor tiles windows).
+
+## 3. Architecture
+
+Luau for the interface, Rust for what a terminal must do per byte and per
+frame. Three Genoma services, general enough for any terminal-shaped need
+(Bioma could show a command's live output in a cell with them):
+
+```
+ shell ⇄ pty (g.pty)  →  emulation (alacritty_terminal, Rust)  →  g.terminal node (GPU)
+                              │ events: title, bell, cwd, marks,        ↑ what lines, folds,
+                              │ progress, clipboard, mode changes        │ selection, cursor
+                              ↓                                          │
+                         Luau: tabs, capsules, panel, signals, keys ─────┘
+```
+
+- **The emulation lives in Rust**, owned by the node that draws it: the
+  grid never crosses into Luau as text, only what Luau asks for (a command's
+  output when copied, the line under the pointer, the marks). Bytes go from
+  the pty to the parser on the loop, never through Luau.
+- **Marks.** `alacritty_terminal` drops OSCs it does not know. Floema needs
+  133 (prompt, command, output, exit code), 7 (cwd), 9;4 (progress), 777
+  and 9 (notifications). A small scanner in front of the parser splits the
+  byte stream at those sequences, feeds the parts, and at each mark records
+  where the cursor is in the grid (absolute line, through the history
+  offset). Those lines are the capsules' edges; they move with the
+  scrollback and are dropped when it drops them.
+- **Shell integration.** fish 4 emits OSC 133 itself (which marks fish 4.9
+  sends, and whether 133;D carries the exit code, to be checked first);
+  bash and zsh get a small script Floema ships and sources through the
+  shell's environment, as Ghostty does. Without marks Floema is a plain
+  terminal: no capsules, everything else works.
+- **Keys.** Legacy encoding plus the kitty keyboard protocol (fish 4 and
+  Claude Code ask for it), ported from Alacritty's `input/keyboard.rs`
+  (Apache-2.0, compatible with Genoma's GPL). The composed text of a dead
+  key is what is sent.
+- **Folds are the view's**: the node is given the spans of lines to show,
+  so a folded output takes one line and the grid underneath is untouched.
+  Scrolling, selection and the pointer are measured through the same spans.
+
+## 4. What Genoma needs
+
+The four lines already in the vault ("App in Genoma"), in this order, each
+verified without Floema before the next:
+
+| Need | What | How it is verified |
+|---|---|---|
+| `g.pty` | open a pseudo-terminal (rustix `openpty`), spawn the shell with `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=Floema`, resize (`TIOCSWINSZ`), read off the loop, the child's exit code and its cwd (`/proc/<pid>/cwd`, when there is no OSC 7) | a scratch interface runs `fish -c`, `stty size`, a resize, a killed child; 0 wake-ups at rest |
+| emulation | `alacritty_terminal` in genoma-script: parser, grid, history, selection, modes (alternate screen, bracketed paste, mouse reporting, kitty keyboard), OSC 52; the mark scanner (§3) | Rust tests feeding recorded sessions (vim, htop, Claude Code, fish with marks); vttest by hand against Alacritty |
+| `g.terminal` node | a grid drawn on the GPU: a glyph atlas of the mono font (glyphon / cosmic-text, as Genoma's text), cell backgrounds, only changed rows drawn again, wide characters and emoji, underline styles, box drawing and blocks drawn by the node itself (no font has them right), selection, spans (folds), the cursor's place given to Luau so Luau draws it | snapshot of a recorded session against Alacritty's screenshot; a 50 MB `cat` measured against Alacritty; GPU time per frame at rest 0 |
+| keys and the rest | key encoding (legacy + kitty protocol), bracketed paste, mouse reporting, IME preedit drawn at the cursor, clipboard by OSC 52 (write only, read asked) | the test set (§7) |
+
+Plus two small changes:
+
+- **Genoma's kit / theme file**: a third font, `fonts.mono`, beside
+  `technical` and `expressive`; `theme.desktop().fonts.mono`.
+- **Bioma**: Appearance gets the mono font (Courier Prime by default, for
+  every Genoma app); `services/desktop_theme.luau` writes it, and the 16
+  terminal colours derived as the Alacritty template derives them
+  (`config/templates/alacritty`), so Floema has one source and follows
+  palette changes live. Without Bioma, Floema derives them from the roles.
+
+## 5. Interface
+
+```
+ (~)─(Development)─(Floema)                                     ← the cwd thread
+ [ fish  ~/Development/Floema ] [ claude ] ( + )                ← tabs, Rizoma's
+ ┊ ❯ cargo build --release                                  41s ┊
+ ┊   Compiling floema …                                         ┊ ← a command: discreet
+ ┊ ❯ git push                                              ✕ 1  ┊ ← failed: rim in alert
+ ┊ ❯ ▌                                                          ┊ ← the prompt, the cursor
+```
+
+- **The capsule's marks** are a rim drawn over the grid's line range, not a
+  box around it: discreet at rest, lit under the pointer and on the one
+  moved to. Folded, a command is its line and a count of the lines hidden.
+- **Running** (from 133;C to 133;D): its edge's movement follows the output's
+  bytes a second, still when nothing comes; a progress (9;4) is a level
+  rising in it, the alert colour when 9;4 says error.
+- **Moving by command**: Ctrl+Up / Ctrl+Down jump; on the one stood on,
+  keys fold it, copy its output, run it again (written at the prompt, as
+  the panel does); a filter shows only the failed ones.
+- **The cursor**: the block in the primary; moving, a trail as long as the
+  distance, shorter as it settles; the blink only after a pause.
+- **Tabs**: Rizoma's tab row (budding capsules, a dashed "+"), each named
+  by its running program or its folder; Ctrl+T new (home), Ctrl+W close
+  (asks if something runs), Ctrl+Tab / Ctrl+PgUp/PgDn move, drag to order.
+- **The cwd thread**: Rizoma's path bar, read only, budding as the folder
+  changes; a press on a step opens it in Rizoma.
+- **Full screen** (alternate screen): the capsule grows to the window and
+  the thread and tabs step back; out of it, everything comes back.
+- No title bar; settings behind a corner button that opens a cell, as the
+  other apps (font size, cursor, notifications threshold, the default
+  terminal switch).
+
+## 6. The folder's commands
+
+Called by a key (to be chosen; Ctrl+Space proposed), a panel grows from the
+cursor with what makes sense where the shell stands, read when it opens:
+
+- the project's own: `Makefile` targets, `package.json` scripts, `just`
+  recipes, `cargo` build / test / run where there is a `Cargo.toml`,
+  `makepkg` where there is a `PKGBUILD`, the folder's executables
+  (`./install.sh`);
+- git, as it is now: commit with changes, push when ahead, pull when
+  behind, the branch;
+- the commands already run in this folder, the most used first: Floema
+  keeps them itself, since every command reaches it with its folder
+  (`$XDG_STATE_HOME/floema/history.json`).
+
+Choosing one writes it at the prompt; Return runs it. Typing filters.
+
+## 7. Phases
+
+Each ends with something usable, verified before the next.
+
+0. **Genoma** (§4): `g.pty`, emulation and marks, the `g.terminal` node,
+   keys; `fonts.mono` in the theme file.
+1. **Prototype**: one window, one shell. Keys, dead keys, paste, Ctrl+C /
+   Ctrl+V as decided, selection, scrollback, resize, the bell, the
+   alternate screen, font size. **Verified against the test set**: vttest,
+   vim, htop, tmux, Claude Code, ssh, a build with a lot of output, a 50 MB
+   `cat`. Measured: latency from key to screen no worse than Alacritty
+   (same probe on both), 0 CPU at rest, memory.
+2. **Capsules**: shell integration, marks, the discreet rims, exit code and
+   duration, moving by command, fold, copy one output, run again, only the
+   failed ones.
+3. **Tabs and the thread**: Rizoma's tab row, the cwd thread, Rizoma opened
+   from it.
+4. **Living**: the cursor's trail, the running capsule's movement, progress,
+   the bell's pulse, notifications.
+5. **The folder's commands** panel.
+6. **The rest of v1**: links, paste confirmation, the settings cell; Bioma's
+   mono font and terminal colours; the default terminal switch (Rizoma F4,
+   the launcher, Mod+T).
+7. **Packaging**: AUR (`depends=('genoma>=…' 'ttf-courier-prime')`), the
+   app icon chosen with Akusen, install.sh as Rizoma's.
+
+## 8. Risks
+
+- **The node is the large part**: glyph atlas, damage, wide characters,
+  box drawing; a terminal that is slower than Alacritty has failed. Measure
+  from the first frame of phase 0.
+- **Marks and folds** are Floema's invention on top of a grid that does not
+  know them: a program that clears the screen or rewrites lines above its
+  start (Claude Code, progress bars) moves under the marks. The scanner
+  records lines, and a capsule whose lines were rewritten keeps its rim
+  only where they still stand.
+- **Kitty keyboard protocol** edge cases (Claude Code, fish): the encoder is
+  tested key by key against Alacritty's output.
+- **Hot reload**: Genoma reloads an interface when its files change; the
+  ptys must survive a reload of the Luau, or the shells die with it
+  (held by the Rust side, keyed by tab).
+
+## 9. Decisions
+
+All Akusen's, 2026-11-25/26 (`docs/questions.md`): keyboard layout and dead
+keys as Alacritty; smooth cursor with a trail; tabs on top, one shell each,
+new ones in home; the folder's commands panel; Bioma's fonts around the
+grid, Courier Prime in it; AUR; every seed of the brainstorm, surviving
+shells optional and after v1; discreet capsules; full-screen programs take
+the window, Claude Code a living capsule; moving by command; Ctrl+C / Ctrl+V
+without Shift; notifications only when unfocused, over 10 s; at rest only a
+non-zero exit code and a long duration; the quick terminal after v1.
+
+Mine, to be confirmed while building: Ctrl+Space for the panel; Ctrl+Up /
+Ctrl+Down for moving by command; the emulation in Rust owned by the node;
+Bioma writing the terminal colours into the theme file.
