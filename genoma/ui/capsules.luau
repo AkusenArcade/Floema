@@ -5,13 +5,9 @@
 -- when there is something to say. Under the pointer, or stood on, it shows
 -- its outline and what can be done with it.
 local g = require("@genoma")
-local commands = require("core/commands")
 local look = require("ui/look")
 
 local M = {}
-
--- The command under the pointer.
-M.hovered = g.signal(nil :: number?)
 
 local ACTION_H = 24
 
@@ -38,10 +34,11 @@ local function label(text: () -> string, colour: () -> string): any
     }
 end
 
--- `t`: term, pad (the grid's corner from the window's), width() of the
--- grid, act(key, what) for "fold", "copy", "again".
+-- `t`: term, commands (core/commands), pad (the grid's corner from the
+-- window's), width() of the grid, act(key, what) for "fold", "copy", "again".
 function M.new(t: { [string]: any }): any
     local term = t.term
+    local commands = t.commands
     local PAD = t.pad
     local shown = g.computed(function(): { Shown }
         local _ = term.changed
@@ -78,7 +75,7 @@ function M.new(t: { [string]: any }): any
     end
     local function capsule(item: () -> Shown): any
         local key = g.untracked(item).key
-        local function lit(): boolean return commands.stood.value == key or M.hovered.value == key end
+        local function lit(): boolean return commands.stood.value == key or commands.hovered.value == key end
         local function y(row: number): number return PAD + row * view().cell_height end
         local function h(): number return (item().bottom - item().top + 1) * view().cell_height end
         local function thread(): string
@@ -138,7 +135,7 @@ function M.new(t: { [string]: any }): any
                 width = PAD - 2,
                 height = h,
                 cursor = "pointer",
-                on_hover = function(on: boolean) if on then M.hovered.value = key end end,
+                on_hover = function(on: boolean) if on then commands.hovered.value = key end end,
                 on_press = function() end,
                 on_click = function(button: number) if button == 272 then t.act(key, "fold") end end,
                 g.capsule {

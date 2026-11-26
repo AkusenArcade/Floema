@@ -159,8 +159,10 @@ Plus two small changes:
 - **The cursor**: the block in the primary; moving, a trail as long as the
   distance, shorter as it settles; the blink only after a pause.
 - **Tabs**: Rizoma's tab row (budding capsules, a dashed "+"), each named
-  by its running program or its folder; Ctrl+T new (home), Ctrl+W close
-  (asks if something runs), Ctrl+Tab / Ctrl+PgUp/PgDn move, drag to order.
+  by its running program or its folder; Ctrl+Shift+T new (home),
+  Ctrl+Shift+W close (asks if something runs), Ctrl+Tab / Ctrl+PgUp/PgDn
+  move, drag to order. (Shift because Ctrl+W deletes a word in the shell and
+  Ctrl+T is fish's file search; §12.)
 - **The cwd thread**: Rizoma's path bar, read only, budding as the folder
   changes; a press on a step opens it in Rizoma.
 - **Full screen** (alternate screen): the capsule grows to the window and
@@ -325,3 +327,49 @@ Left for later, on purpose:
 
 Not yet: the time a command ran shown under the pointer (no wall clock in
 Genoma's Luau yet; the plan's §1 asks for it).
+
+## 12. Phase 3, as built (2026-11-26)
+
+- **A tab is a shell** (`core/tabs.luau`): its pty, its terminal, its
+  commands (`core/commands.luau` is now one per terminal), the folder it
+  stands in and what runs in it. The folder is OSC 7 where the shell says it
+  (fish does) and the shell's own folder at each prompt otherwise (bash,
+  zsh). What runs is the terminal's foreground program, read when a command
+  starts (a moment after, so it is the program and not the shell) and ends,
+  and when the title changes.
+- **The tabs** (`ui/tabs.luau`), after three tries with Akusen: a line
+  rising round the seen tab, first across the whole window, then only round
+  it with fading tails, read as out of Bioma's style. What stays is Bioma's
+  segmented control at the size of a name: the names in a row on a track
+  (`TRACK`, or bare) a little darker than the window and with no outline
+  (an outline makes it the segmented choice of the settings), the seen one
+  a pill in the secondary (the primary is the interactive components'),
+  with an edge of its own hue, darker, its name dark.
+  Choosing another, the pill goes as a drop would: the edge it moves
+  towards leads on a quick spring a little past (`pill_lead`, Bioma's `hop`
+  damped for the length it travels), the other follows softer
+  (`pill_trail`), so it stretches on the way and gathers where it arrives;
+  it never leaves the track, and a name turns dark the moment the pill is
+  under it. Always there, one tab too, with the dashed "+" after the track.
+  The cross shows under the pointer. A tab where something runs asks before
+  it closes: "sleep runs: close?", the pill in the alert colour; a second
+  close closes it, Escape or four seconds forget it. Middle click closes,
+  drag orders. A shell that exits takes its tab with it; the last tab
+  closes the window.
+- **No path above the grid for now** (Akusen, 2026-11-26: not convinced of
+  its use). It was Rizoma's path, read only, budding at each `cd`, a press
+  on a step opening it in Rizoma; `ui/thread.luau` keeps it, unused, to be
+  thought about again. Drawn on the prompt's own line instead (pure leaving
+  the room for it) it was too small and too near the cursor.
+- Genoma: a `g.path` with a long straight run after a curve draws a second,
+  brighter line along part of it (the stroke's fringe; reproduced alone).
+- **Keys**: Ctrl+Shift+T a new tab in the home folder, Ctrl+Shift+W close,
+  Ctrl+Tab / Ctrl+Shift+Tab and Ctrl+PgUp/PgDn move, Ctrl+Shift+PgUp/PgDn
+  move the tab itself.
+- **Only the seen tab's grid is built**; the others' terminals go on
+  without a view. A box per tab hidden by a reactive `present` stalled every
+  transition in the window (Genoma; not looked into yet).
+
+Seen in headless Umbriel, not yet on a desktop: a Genoma window resized
+while it has not the keys presents no new frame until it has them again
+(phase 2's Floema too: its cursor stays filled).
