@@ -55,14 +55,15 @@ its origin.
   pastes text, and is passed on to the program when the clipboard holds
   only an image (Claude Code takes images so); Ctrl+Shift+C/V still work.
   Several lines pasted ask first, unless the program takes bracketed paste.
-- Shift+Return sends ESC CR (Claude Code's new line); Ctrl+= / Ctrl+- /
-  Ctrl+0 for the font size.
+- Shift+Return sends ESC CR (Claude Code's new line).
 - Ctrl+click on a path or a URL: the browser, Rizoma, the default app.
 - The folder's commands panel (§6).
 - Look: padding 12; block cursor with its trail, blinking only after a
   while idle; opacity is the compositor's; ANSI colours from Bioma's
-  palette, live; the grid in the theme's `mono` font, **Courier Prime** by
-  default; Bioma's fonts everywhere else.
+  palette, live; the grid in the theme's `mono` font, **Space Mono at 15**
+  by default; Bioma's fonts everywhere else.
+- **The size of the letters is the person's**: Ctrl+= / Ctrl+- / Ctrl+0
+  and the settings cell, kept between runs (`~/.config/floema/config.json`).
 - Floema as the terminal Rizoma's F4, Bioma's launcher and Mod+T open,
   when switched on (as Rizoma's DEFAULT).
 
@@ -128,7 +129,7 @@ Plus two small changes:
 
 - **Genoma's kit / theme file**: a third font, `fonts.mono`, beside
   `technical` and `expressive`; `theme.desktop().fonts.mono`.
-- **Bioma**: Appearance gets the mono font (Courier Prime by default, for
+- **Bioma**: Appearance gets the mono font (Space Mono by default, for
   every Genoma app); `services/desktop_theme.luau` writes it, and the 16
   terminal colours derived as the Alacritty template derives them
   (`config/templates/alacritty`), so Floema has one source and follows
@@ -195,7 +196,8 @@ Each ends with something usable, verified before the next.
    alternate screen, font size. **Verified against the test set**: vttest,
    vim, htop, tmux, Claude Code, ssh, a build with a lot of output, a 50 MB
    `cat`. Measured: latency from key to screen no worse than Alacritty
-   (same probe on both), 0 CPU at rest, memory.
+   (same probe on both), 0 CPU at rest, memory. The size of the letters
+   set by keys and kept.
 2. **Capsules**: shell integration, marks, the discreet rims, exit code and
    duration, moving by command, fold, copy one output, run again, only the
    failed ones.
@@ -207,7 +209,8 @@ Each ends with something usable, verified before the next.
 6. **The rest of v1**: links, paste confirmation, the settings cell; Bioma's
    mono font and terminal colours; the default terminal switch (Rizoma F4,
    the launcher, Mod+T).
-7. **Packaging**: AUR (`depends=('genoma>=…' 'ttf-courier-prime')`), the
+7. **Packaging**: AUR (`depends=('genoma>=…' 'ttf-space-mono-nerd')`, in
+   extra; or Space Mono shipped with Floema, OFL), the
    app icon chosen with Akusen, install.sh as Rizoma's.
 
 ## 8. Risks
@@ -231,7 +234,9 @@ Each ends with something usable, verified before the next.
 All Akusen's, 2026-11-25/26 (`docs/questions.md`): keyboard layout and dead
 keys as Alacritty; smooth cursor with a trail; tabs on top, one shell each,
 new ones in home; the folder's commands panel; Bioma's fonts around the
-grid, Courier Prime in it; AUR; every seed of the brainstorm, surviving
+grid, Space Mono at 15 in it (after Courier Prime, Lekton, Sometype Mono,
+Geist Mono and Monaspace Neon were tried in the grid, 2026-11-26), its size
+adjustable and kept; AUR; every seed of the brainstorm, surviving
 shells optional and after v1; discreet capsules; full-screen programs take
 the window, Claude Code a living capsule; moving by command; Ctrl+C / Ctrl+V
 without Shift; notifications only when unfocused, over 10 s; at rest only a

@@ -103,7 +103,11 @@ new line).
 
 ### Answers (Akusen, 2026-11-26)
 
-- Font of the grid: **Courier Prime**.
+- Font of the grid: Courier Prime, at first; in the grid it was hard to
+  read. Lekton (the Olivetti one) and Sometype Mono did not convince either,
+  nor Geist Mono and Monaspace Neon: **Space Mono at 15** (2026-11-26).
+  `docs/drafts/fonts-live.png`, `fonts-live-2.png`.
+- **The size of the letters must be adjustable** (2026-11-26), and kept.
 13. A new tab opens in the home folder.
 14. Shells that survive the window: after v1.
 15. The quick terminal dropping from a membrane: he likes it a lot; after v1.
@@ -117,7 +121,7 @@ new line).
 19. Shift+Return sends ESC CR; Ctrl+= / Ctrl+- / Ctrl+0 for the font size.
 20. Padding 12; opacity is the compositor's.
 21. Block cursor with its trail; it blinks only after a while idle.
-22. Courier Prime the default `mono` in the theme file, changeable in Bioma's
+22. Courier Prime (now Space Mono at 15) the default `mono` in the theme file, changeable in Bioma's
     Appearance for every app.
 23. ANSI colours from Bioma's palette, live.
 24. The cwd as a thread at the top of the tab, a press opens it in Rizoma.
