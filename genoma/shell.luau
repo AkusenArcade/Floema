@@ -9,6 +9,7 @@ local g = require("@genoma")
 local clipboard = require("@genoma/clipboard")
 local tabs = require("core/tabs")
 local capsules = require("ui/capsules")
+local cursor_ui = require("ui/cursor")
 local look = require("ui/look")
 local tab_row = require("ui/tabs")
 
@@ -90,6 +91,43 @@ g.watch(function() return look.background() .. look.text() .. look.primary() end
 end)
 
 tabs.on_clipboard = function(text: string) clipboard:set_text(text) end
+
+-- Notifications, Bioma's (as its own: notify-send), only when they tell
+-- something not seen: the window without the keys, or another tab.
+local function unseen(t: tabs.Tab): boolean
+    return not g.untracked(function() return focused.value end) or g.untracked(seen) ~= t
+end
+local function notify(title: string, body: string, urgent: boolean?)
+    local command = { "notify-send", "-a", "Floema", "-i", "utilities-terminal" }
+    if urgent then
+        table.insert(command, "-u")
+        table.insert(command, "critical")
+    end
+    table.insert(command, title)
+    if body ~= "" then table.insert(command, body) end
+    pcall(function() g.process { command = command } end)
+end
+-- A command that took long and ended where it was not seen.
+local LONG = 10
+tabs.on_finished = function(t: tabs.Tab, c: any, took: number)
+    if took < LONG or not unseen(t) then return end
+    local failed = c.code ~= nil and c.code ~= 0
+    notify(if failed then `Failed, exit {c.code}` else "Done", c.text, false)
+end
+tabs.on_notify = function(t: tabs.Tab, title: string, body: string)
+    if not unseen(t) then return end
+    notify(if title ~= "" then title else tabs.name(t), body)
+end
+-- The bell rings at the cursor of its tab.
+local bells: { [number]: any } = {}
+local function bells_of(t: tabs.Tab): any
+    if bells[t.id] == nil then bells[t.id] = g.signal(0) end
+    return bells[t.id]
+end
+tabs.on_bell = function(t: tabs.Tab)
+    local b = bells_of(t)
+    b.value = g.untracked(function() return b.value end) + 1
+end
 tabs.on_empty = function() g.quit() end
 
 local function seen(): tabs.Tab? return tabs.tab.value end
@@ -240,47 +278,14 @@ local function screen(tab: tabs.Tab): any
         return term:view()
     end
 
-    -- The cursor: a block in the primary, the character under it in the
-    -- background's colour; hollow while the window has not the keys.
-    local cursor = g.capsule {
-        overlay = true,
-        attach = "corner",
-        present = function()
-            local c = term:cursor()
-            local v = view()
-            return c.shown and v.cell_width > 0 and term:row(c.line) ~= nil
-        end,
-        offset_x = function() return PAD + term:cursor().column * view().cell_width end,
-        offset_y = function()
-            local v = view()
-            return PAD + (term:row(term:cursor().line) or 0) * v.cell_height
-        end,
-        width = function() return view().cell_width end,
-        height = function() return view().cell_height end,
-        radius = 0,
-        fill = function() return if focused.value then look.primary() else look.CLEAR end,
-        rim_top = look.primary,
-        rim_bottom = look.primary,
-        g.text {
-            present = function() return focused.value end,
-            text = function()
-                local c = term:cursor()
-                local line = term:line(c.line) or ""
-                local ch = ""
-                local i = 0
-                for _, code in utf8.codes(line) do
-                    if i == c.column then
-                        ch = utf8.char(code)
-                        break
-                    end
-                    i += 1
-                end
-                return ch
-            end,
-            color = look.background,
-            font = FONT,
-            size = function() return size.value end,
-        },
+    local cursor = cursor_ui.new {
+        term = term,
+        pad = PAD,
+        view = view,
+        focused = function() return focused.value end,
+        font = FONT,
+        size = function() return size.value end,
+        bells = function() return bells_of(tab).value end,
     }
 
     -- ---- The pointer -------------------------------------------------------------------
@@ -420,6 +425,7 @@ local function screen(tab: tabs.Tab): any
             pad = PAD,
             width = function() return area.value.w - PAD * 2 end,
             act = act,
+            rate = function() return tab.rate.value end,
         },
         cursor,
     }

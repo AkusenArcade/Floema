@@ -19,6 +19,9 @@ export type Command = {
     started: number?,
     ended: number?,
     text: string,
+    -- What the program said of its progress (OSC 9;4) while it ran: state
+    -- 1 a value, 2 an error, 3 no value known, 4 paused; value 0 to 100.
+    progress: { state: number, value: number }?,
 }
 
 -- One terminal's commands; `C.mark` is to be given what g.terminal's
@@ -110,11 +113,35 @@ function M.new(term: any): any
         changed()
     end
 
+    -- From g.terminal's on_progress: the running command's.
+    function C.progress(state: number, value: number)
+        local last = C.list[#C.list]
+        if last == nil or last.output == nil or last.done ~= nil then return end
+        last.progress = if state == 0 then nil else { state = state, value = value }
+        changed()
+    end
+
     function C.find(key: number?): (Command?, number?)
         for i, c in C.list do
             if c.key == key then return c, i end
         end
         return nil, nil
+    end
+
+    -- Whether its line still shows what was typed: a program that clears
+    -- the screen or draws over it (Claude Code, a full repaint) leaves the
+    -- shell's marks on lines that now say something else.
+    function C.intact(c: Command): boolean
+        local at = C.line(c.command)
+        if at == nil or c.text == "" then return true end
+        local text = term:line(at) or ""
+        local from = utf8.offset(text, c.column + 1)
+        if from == nil then return false end
+        local typed = string.match(c.text, "^[^\n]*") or ""
+        local shown = string.sub(text, from)
+        -- What fits on the line of what was typed, its start.
+        local n = math.min(#typed, #shown, 40)
+        return n > 0 and string.sub(shown, 1, n) == string.sub(typed, 1, n)
     end
 
     -- Whether it ran (an empty line given to the shell is not a command).
@@ -176,7 +203,9 @@ function M.new(term: any): any
         local only = C.failed_only.value
         local out: { { number } } = {}
         for i, c in C.list do
-            if only and i < #C.list and C.ran(c) and c.code == 0 then
+            if not C.intact(c) then
+                continue
+            elseif only and i < #C.list and C.ran(c) and c.code == 0 then
                 local a, b = C.span(c)
                 if a and b then table.insert(out, { a, b }) end
             elseif folded[c.key] then
@@ -191,7 +220,7 @@ function M.new(term: any): any
     function C.step(by: number)
         local ran: { Command } = {}
         for _, c in C.list do
-            if C.ran(c) then table.insert(ran, c) end
+            if C.ran(c) and C.intact(c) then table.insert(ran, c) end
         end
         if #ran == 0 then return end
         local at: number? = nil

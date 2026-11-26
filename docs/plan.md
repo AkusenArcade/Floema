@@ -167,9 +167,10 @@ Plus two small changes:
   changes; a press on a step opens it in Rizoma.
 - **Full screen** (alternate screen): the capsule grows to the window and
   the thread and tabs step back; out of it, everything comes back.
-- No title bar; settings behind a corner button that opens a cell, as the
-  other apps (font size, cursor, notifications threshold, the default
-  terminal switch).
+- No title bar; settings behind a round button with Floema's logo in the
+  window's bottom-right corner, the cell budding from it (the rule of every
+  Bioma-suite app, as Rizoma's ui/view_cell.luau): font size, cursor,
+  notifications threshold, the default terminal switch.
 
 ## 6. The folder's commands
 
@@ -361,15 +362,43 @@ Genoma's Luau yet; the plan's §1 asks for it).
   on a step opening it in Rizoma; `ui/thread.luau` keeps it, unused, to be
   thought about again. Drawn on the prompt's own line instead (pure leaving
   the room for it) it was too small and too near the cursor.
-- Genoma: a `g.path` with a long straight run after a curve draws a second,
-  brighter line along part of it (the stroke's fringe; reproduced alone).
+- Genoma: a `g.path` with a long straight run after a curve drew a second,
+  brighter line along part of it; fixed in Genoma 8fe142c (the fringe's
+  triangles cut short near the boundary).
 - **Keys**: Ctrl+Shift+T a new tab in the home folder, Ctrl+Shift+W close,
   Ctrl+Tab / Ctrl+Shift+Tab and Ctrl+PgUp/PgDn move, Ctrl+Shift+PgUp/PgDn
   move the tab itself.
 - **Only the seen tab's grid is built**; the others' terminals go on
-  without a view. A box per tab hidden by a reactive `present` stalled every
-  transition in the window (Genoma; not looked into yet).
+  without a view. (A box per tab hidden by a reactive `present` once seemed
+  to stall the window's transitions; it could not be made to happen again,
+  2026-11-26.)
 
-Seen in headless Umbriel, not yet on a desktop: a Genoma window resized
-while it has not the keys presents no new frame until it has them again
-(phase 2's Floema too: its cursor stays filled).
+In headless Umbriel a fullscreen window beside a new one is cropped, not
+resized (the compositor's); a window that is not fullscreen redraws at its
+new size with or without the keys.
+
+## 13. Phase 4, as built (2026-11-26)
+
+- **The cursor** (`ui/cursor.luau`): a quadrilateral whose four corners are
+  each on a spring: those in front of a move on a quick one
+  (`cursor_lead`), those behind on a slower one (`cursor_trail`), both
+  damped to stop where they go. Moving, it stretches from where it was to
+  where it goes, as long as the jump, and gathers there; the character
+  under it is drawn once it has arrived. It takes the shape the program
+  asks for (DECSCUSR: block, beam, underline; Genoma's `t:cursor().shape`)
+  and is hollow while the window has not the keys. No blink: motion with
+  nothing behind it, and a frame at rest.
+- **The running command** (`ui/rate_thread.wgsl`): its thread in the
+  margin is Bioma's rate thread stood upright, a hairline with dashes
+  running down it as fast as the program writes (bytes a second on a
+  logarithmic scale, from Genoma's `t.received`), still when it writes
+  nothing. The rate is measured when output comes and once more after it
+  stops: nothing runs at rest.
+- **Progress** (OSC 9;4): a level rising from the foot of the running
+  command's thread, the alert colour on an error, the secondary while
+  paused; an unknown amount leaves the dashes alone.
+- **The bell**: a ring leaves the cursor, grows and fades, once a bell.
+- **Notifications**, Bioma's (`notify-send`), only for what is not seen
+  (the window without the keys, or another tab): a command that took more
+  than 10 seconds and ended ("Done" or "Failed, exit N", the command), and
+  what a program asks for (OSC 777, 9).

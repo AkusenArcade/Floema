@@ -157,8 +157,17 @@ g.timing {
     -- follows softer and barely past, so the pill stretches on the way.
     pill_lead = { spring = { stiffness = 420, damping = 28 } },
     pill_trail = { spring = { stiffness = 230, damping = 27 } },
+    -- The cursor's corners (ui/cursor.luau): those in front of a move on a
+    -- quick spring, those behind on a slower one, both damped to stop
+    -- where they go: a trail as long as the jump, and no bounce on a
+    -- thing that must say exactly where it is.
+    cursor_lead = { spring = { stiffness = 1100, damping = 66 } },
+    cursor_trail = { spring = { stiffness = 260, damping = 32 } },
+    -- The bell's ring leaving the cursor: out and gone.
+    bell = { duration = 0.55, curve = { 0.2, 0.7, 0.3, 1 } },
 }
 M.CLOSE = 0.16
+M.BELL = 0.6
 -- How long `n` shoots take to go back.
 local BACK, AFTER = 0.28, 0.12
 function M.shoots_back(n: number): number return BACK + (math.min(n, 5) - 1) * AFTER end

@@ -9,6 +9,17 @@ local look = require("ui/look")
 
 local M = {}
 
+local RATE_THREAD = g.dir .. "/ui/rate_thread.wgsl"
+
+local function push(out: { number }, hex: string)
+    local c = g.colour.parse(hex)
+    if c == nil then return end
+    table.insert(out, c.r)
+    table.insert(out, c.g)
+    table.insert(out, c.b)
+    table.insert(out, c.a)
+end
+
 local ACTION_H = 24
 
 type Shown = {
@@ -21,6 +32,8 @@ type Shown = {
     code: number?,
     took: string,
     folded: number,
+    -- What it said of its progress, while it runs.
+    progress: { state: number, value: number }?,
 }
 
 local function label(text: () -> string, colour: () -> string): any
@@ -35,10 +48,18 @@ local function label(text: () -> string, colour: () -> string): any
 end
 
 -- `t`: term, commands (core/commands), pad (the grid's corner from the
--- window's), width() of the grid, act(key, what) for "fold", "copy", "again".
+-- window's), width() of the grid, act(key, what) for "fold", "copy", "again",
+-- rate() (how fast the program writes, bytes a second).
 function M.new(t: { [string]: any }): any
     local term = t.term
     local commands = t.commands
+    -- The running command's dashes: units a second, on a logarithmic scale
+    -- of the bytes (a few a second to many megabytes), 0 when none come.
+    local function speed(): number
+        local r = if t.rate then t.rate() else 0
+        if r < 8 then return 0 end
+        return 10 + 34 * math.log10(1 + r / 1024)
+    end
     local PAD = t.pad
     local shown = g.computed(function(): { Shown }
         local _ = term.changed
@@ -46,12 +67,19 @@ function M.new(t: { [string]: any }): any
         local folded = commands.folded.value
         local out: { Shown } = {}
         for i, c in commands.list do
-            if commands.ran(c) or i == #commands.list and c.output then
-                local first, last = commands.span(c)
+            local running = c.output ~= nil and c.done == nil
+            local first, last = commands.span(c)
+            -- Only what is in view is asked whether its line still says it.
+            local seen = first ~= nil and last ~= nil and term:span(first, last) ~= nil
+            local intact = seen and commands.intact(c)
+            -- One whose line was drawn over is gone, unless it runs: then it
+            -- is its thread alone, from the top of the screen it took.
+            if seen and (commands.ran(c) or i == #commands.list and c.output) and (intact or running) then
+                if not intact and first then first = math.max(first, term.screen_line) end
                 if first and last then
                     local top, bottom = term:span(first, last)
                     if top and bottom then
-                        local line = commands.line(c.command)
+                        local line = if intact then commands.line(c.command) else nil
                         local of, ot = commands.output_span(c)
                         table.insert(out, {
                             key = c.key,
@@ -62,6 +90,7 @@ function M.new(t: { [string]: any }): any
                             code = c.code,
                             took = commands.took(c),
                             folded = if folded[c.key] and of and ot then ot - of + 1 else 0,
+                            progress = if c.done == nil then c.progress else nil,
                         })
                     end
                 end
@@ -75,7 +104,12 @@ function M.new(t: { [string]: any }): any
     end
     local function capsule(item: () -> Shown): any
         local key = g.untracked(item).key
-        local function lit(): boolean return commands.stood.value == key or commands.hovered.value == key end
+        -- Lit under the pointer or stood on, once it has ended: what can be
+        -- done with it is for a command that is done.
+        local function lit(): boolean
+            if item().state == "running" then return false end
+            return commands.stood.value == key or commands.hovered.value == key
+        end
         local function y(row: number): number return PAD + row * view().cell_height end
         local function h(): number return (item().bottom - item().top + 1) * view().cell_height end
         local function thread(): string
@@ -85,6 +119,12 @@ function M.new(t: { [string]: any }): any
             return if lit() then look.node() else g.colour.alpha(look.line(), 0.7)
         end
         local function meta_row(): number? return item().line_row end
+        -- How much of `full` the progress fills.
+        local function level(full: number): number
+            local p = item().progress
+            if p == nil then return 0 end
+            return math.max(2, full * math.clamp(p.value, 0, 100) / 100)
+        end
         local function action(name: string, what: string, word: () -> string): any
             local over = g.signal(false)
             return g.capsule {
@@ -141,6 +181,7 @@ function M.new(t: { [string]: any }): any
                 g.capsule {
                     overlay = true,
                     attach = "corner",
+                    present = function() return item().state ~= "running" end,
                     offset_x = 4,
                     offset_y = 2,
                     width = 2,
@@ -150,6 +191,54 @@ function M.new(t: { [string]: any }): any
                     rim_top = look.CLEAR,
                     rim_bottom = look.CLEAR,
                     transition = { fill = "ui_change" },
+                },
+                -- What it said of its progress: a level rising from the
+                -- foot of the thread, in the alert colour on an error, the
+                -- secondary while it is paused.
+                g.capsule {
+                    overlay = true,
+                    attach = "corner",
+                    present = function()
+                        local p = item().progress
+                        return p ~= nil and p.state ~= 3
+                    end,
+                    offset_x = 4,
+                    offset_y = function()
+                        local full = math.max(2, h() - 4)
+                        return 2 + full - level(full)
+                    end,
+                    width = 2,
+                    height = function() return level(math.max(2, h() - 4)) end,
+                    radius = 1,
+                    fill = function()
+                        local p = item().progress
+                        if p and p.state == 2 then return look.alert() end
+                        if p and p.state == 4 then return look.secondary() end
+                        return look.primary()
+                    end,
+                    rim_top = look.CLEAR,
+                    rim_bottom = look.CLEAR,
+                    transition = { offset_y = "ui_change", height = "ui_change", fill = "ui_change" },
+                },
+                -- Running, Bioma's rate thread: dashes run down it as fast
+                -- as the program writes, still when it writes nothing.
+                g.shader {
+                    overlay = true,
+                    attach = "corner",
+                    present = function() return item().state == "running" end,
+                    offset_x = 2,
+                    offset_y = 2,
+                    width = 6,
+                    height = function() return math.max(2, h() - 4) end,
+                    src = RATE_THREAD,
+                    follow = 0,
+                    clock = function() return speed() > 0 end,
+                    values = function()
+                        local out = { speed(), 2, look.thread, 0 }
+                        push(out, g.colour.alpha(look.primary(), 0.35))
+                        push(out, look.primary())
+                        return out
+                    end,
                 },
             },
             -- Stood on or under the pointer, what can be done: in the middle

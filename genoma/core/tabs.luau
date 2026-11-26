@@ -21,6 +21,8 @@ export type Tab = {
     title: any,
     -- Closing it was asked while something runs in it: a second time closes.
     asking: any,
+    -- How fast the program writes, bytes a second.
+    rate: any,
 }
 
 M.tabs = g.signal({} :: { Tab })
@@ -30,6 +32,11 @@ M.tab = g.signal(nil :: Tab?)
 M.on_title = function(_: Tab, _: string) end
 M.on_clipboard = function(_: string) end
 M.on_empty = function() end
+-- A command that ended (with how long it took, seconds), a program asking
+-- for a notification (OSC 777, 9), the bell.
+M.on_finished = function(_: Tab, _: any, _: number) end
+M.on_notify = function(_: Tab, _: string, _: string) end
+M.on_bell = function(_: Tab) end
 
 -- The shell: FLOEMA_SHELL, else the person's. fish marks its commands by
 -- itself; bash and zsh are given Floema's marks (shell/), their own
@@ -128,10 +135,39 @@ function M.new(folder: string?): Tab
             elseif kind == "prompt" or kind == "done" then
                 read()
             end
+            if kind == "done" then
+                local c = t.commands.list[#t.commands.list]
+                if c and c.started and c.ended and t.commands.ran(c) then M.on_finished(t, c, c.ended - c.started) end
+            end
         end,
         on_cwd = function(path: string) if path ~= "" then t.cwd.value = path end end,
+        on_progress = function(state: number, value: number) t.commands.progress(state, value) end,
+        on_notify = function(title: string, body: string) M.on_notify(t, title, body) end,
+        on_bell = function() M.on_bell(t) end,
     }
     t.commands = commands.new(t.term)
+    -- How fast the program writes, bytes a second over the last half
+    -- second: measured when output comes, and once more after it stops, so
+    -- it falls to nothing; nothing runs while nothing comes.
+    t.rate = g.signal(0)
+    local samples: { { number } } = {}
+    local settling: any = nil
+    local function measure()
+        -- (A Genoma before 0.1.26 does not count them: no rate.)
+        local now, bytes = g.now(), t.term.received or 0
+        table.insert(samples, { now, bytes })
+        while #samples > 1 and now - samples[1][1] > 0.5 do table.remove(samples, 1) end
+        local first = samples[1]
+        local span = now - first[1]
+        local rate = if span > 0.05 then (bytes - first[2]) / span else 0
+        t.rate.value = rate
+        if settling then settling:stop() end
+        settling = if rate > 0 then g.after(0.55, function()
+            settling = nil
+            measure()
+        end) else nil
+    end
+    g.watch(function() return t.term.changed end, measure)
     -- What the view leaves out follows the folds.
     g.effect(function() t.term:hide(t.commands.hidden()) end)
     local list = table.clone(g.untracked(function() return M.tabs.value end))
