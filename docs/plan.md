@@ -1,8 +1,9 @@
 # Floema — plan
 
-Status: plan, 2026-11-26, from the brainstorm in `docs/questions.md`
-(Akusen's answers there are the source; this file only orders them). Not
-started. Pace: prototype first, the organic interface after.
+Status: phases 0 and 1 built, 2026-11-26 (§10); phase 2 next. From the
+brainstorm in `docs/questions.md` (Akusen's answers there are the source;
+this file only orders them). Pace: prototype first, the organic interface
+after.
 
 ## 1. What it is
 
@@ -245,3 +246,48 @@ non-zero exit code and a long duration; the quick terminal after v1.
 Mine, to be confirmed while building: Ctrl+Space for the panel; Ctrl+Up /
 Ctrl+Down for moving by command; the emulation in Rust owned by the node;
 Bioma writing the terminal colours into the theme file.
+
+## 10. Phases 0 and 1, as built (2026-11-26)
+
+Genoma (e80a36c and after): `g.pty`, `g.terminal`, `g.terminal_view`, key
+encoding. Differences from §3–4, learned while building:
+
+- **The terminal is read and parsed on a thread of its own**, not on the
+  loop: the grid sits behind a lock, taken a 64 KB piece at a time by the
+  parser and for a snapshot of the rows in view by the drawing. The changes
+  reach Luau once a turn of the loop.
+- **Letters are spaced to fill their cells** (cosmic-text's monospace width
+  scales glyphs instead), and characters outside the grid's font (emoji,
+  CJK, arrows, the prompt's ❯) are pieces of their own at their column.
+- `alacritty_terminal` is vendored with one addition, the count of lines
+  that leave for the history, so marks keep their line.
+
+Floema (`genoma/shell.luau`): one window, one shell; keys as the program
+asked (fish 4 turns the kitty keyboard protocol on); dead keys composed;
+Ctrl+C copies with a selection, else interrupts; Ctrl+V pastes text and
+leaves an image to the program; selection by character, word, line; the
+middle button pastes; the pointer and the wheel to programs that ask (Shift
+keeps them); Shift+Return; the size of the letters by keys, kept.
+
+The test set, in a headless Umbriel against Alacritty there:
+
+| | Floema | Alacritty |
+|---|---|---|
+| key to screen (median of 40) | 12.3 ms | 12.8 ms |
+| 50 MB of coloured text | 0.50 s | 0.42 s |
+| `seq 1 2000000` | 0.56 s | 0.46 s |
+| at rest | 0 CPU, 76 MB | |
+
+Claude Code works inside it as it should (Akusen, 2026-11-26).
+
+vttest's screens are Alacritty's, defects included (both keep their width
+when a program asks for 80 or 132 columns); btop, vim, top and tmux 3.8
+with split panes and a status bar draw as they should.
+
+Left for later, on purpose:
+
+- **Speed**: the 20 % behind Alacritty on a flood of output is the hand-off
+  between the two threads; the parser itself costs what Alacritty's does.
+- **Input methods** (Chinese, Japanese): Genoma takes text-input-v3 only
+  in its fields; dead keys, which Akusen uses, work.
+- Columns asked by a program (DECCOLM) are not obeyed, as in Alacritty.
