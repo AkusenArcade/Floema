@@ -14,6 +14,8 @@ M.CLEAR = "#00000000"
 function M.background(): string return theme.get("background") end
 function M.text(): string return theme.get("text") end
 function M.primary(): string return theme.get("accent") end
+-- What failed, what stops something.
+function M.alert(): string return theme.get("danger") end
 
 function M.is_dark(): boolean
     local d = theme.desktop()

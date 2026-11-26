@@ -1,6 +1,6 @@
 # Floema — plan
 
-Status: phases 0 and 1 built, 2026-11-26 (§10); phase 2 next. From the
+Status: phases 0, 1 and 2 built, 2026-11-26 (§10, §11); phase 3 next. From the
 brainstorm in `docs/questions.md` (Akusen's answers there are the source;
 this file only orders them). Pace: prototype first, the organic interface
 after.
@@ -291,3 +291,37 @@ Left for later, on purpose:
 - **Input methods** (Chinese, Japanese): Genoma takes text-input-v3 only
   in its fields; dead keys, which Akusen uses, work.
 - Columns asked by a program (DECCOLM) are not obeyed, as in Alacritty.
+
+## 11. Phase 2, as built (2026-11-26)
+
+- **The marks are the terminal's**, followed by id (`t:mark`): when the
+  window's width changes and the lines rewrap, each mark is counted in
+  whole lines from the cursor (which a rewrap keeps) and found again, so a
+  capsule stays on its text through niri's and Umbriel's resizes.
+- **Folds are the view's** (`t:hide`): the rows above take the place of the
+  lines left out; the cursor, the selection and the capsules read where
+  lines are drawn from the same map (`t:row`, `t:span`, `t:line_at`).
+- `core/commands.luau` builds the commands from the marks: a prompt drawn
+  again where nothing ran replaces the last; one drawn over older commands
+  (a cleared screen) takes them away. `ui/capsules.luau` draws them.
+- **At rest**: a 2-unit thread down the margin beside each command's lines,
+  faint for one that ended well, the alert colour for one that failed, the
+  primary while it runs; on its line, only when there is something to say,
+  "exit N", how long it took past 3 seconds, how many lines are folded.
+- **Under the pointer or stood on**: its outline (the primary when stood
+  on) and three Bioma buttons in the middle of its line (Akusen,
+  2026-11-26), "exit N" and the rest staying at its end: FOLD/UNFOLD, COPY (its output,
+  wrapped lines joined), AGAIN (written at the prompt, bracketed, not run).
+  A press on the thread folds it.
+- **Keys**: Ctrl+Up / Ctrl+Down stand on the commands, the view following;
+  then Up/Down move, F folds, C copies the output, R writes it again, E
+  shows only the failed ones; Escape leaves, anything else typed leaves and
+  goes on to the shell.
+- **bash and zsh** get the marks from `shell/` (as Ghostty does): bash
+  started with `--rcfile shell/floema.bash`, which reads `~/.bashrc` first;
+  zsh through `ZDOTDIR=shell/zsh`, whose `.zshenv` gives the person's
+  ZDOTDIR back, reads their `.zshenv` and adds precmd/preexec hooks. fish
+  marks by itself. Verified on all three.
+
+Not yet: the time a command ran shown under the pointer (no wall clock in
+Genoma's Luau yet; the plan's §1 asks for it).

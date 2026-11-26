@@ -6,6 +6,8 @@
 --   genoma Floema/genoma          (FLOEMA_SHELL: the program; $SHELL otherwise)
 local g = require("@genoma")
 local clipboard = require("@genoma/clipboard")
+local commands = require("core/commands")
+local capsules = require("ui/capsules")
 local look = require("ui/look")
 
 local PAD = 12
@@ -31,6 +33,7 @@ end
 local function valid_size(v: any): number?
     return if type(v) == "number" then math.clamp(math.floor(v + 0.5), SIZE_MIN, SIZE_MAX) else nil
 end
+local area = g.signal({ w = 980, h = 620 })
 local size = g.signal(valid_size(tonumber(g.env("FLOEMA_SIZE") or "")) or valid_size(kept.font_size) or SIZE_DEFAULT)
 local saving: any = nil
 g.watch(function() return size.value end, function(v: number)
@@ -71,21 +74,36 @@ local function palette(): { [string]: any }?
     return { colours = normal }
 end
 
-local command: { string }? = nil
-local wanted = g.env("FLOEMA_SHELL")
-if wanted and wanted ~= "" then command = { wanted } end
+-- The shell: FLOEMA_SHELL, else the person's. fish marks its commands by
+-- itself; bash and zsh are given Floema's marks (shell/), their own
+-- configuration read first.
+local program = g.env("FLOEMA_SHELL")
+if program == nil or program == "" then program = g.env("SHELL") or "/bin/sh" end
+local name = string.match(program, "([^/]+)$") or program
+local command: { string } = { program }
+local env: { [string]: string } = { TERM_PROGRAM = "Floema" }
+if name == "bash" then
+    command = { program, "--rcfile", g.dir .. "/shell/floema.bash" }
+elseif name == "zsh" then
+    env.FLOEMA_ZDOTDIR = g.env("ZDOTDIR") or ""
+    env.ZDOTDIR = g.dir .. "/shell/zsh"
+end
 
 local pty = g.pty {
     command = command,
     cwd = g.env("HOME"),
-    env = { TERM_PROGRAM = "Floema" },
+    env = env,
     on_exit = function() g.quit() end,
 }
 local term = g.terminal {
     pty = pty,
     on_title = function(t: string) title.value = if t ~= "" then t else "Floema" end,
     on_clipboard = function(text: string) clipboard:set_text(text) end,
+    on_mark = commands.mark,
 }
+commands.attach(term)
+-- What the view leaves out follows the folds.
+g.effect(function() term:hide(commands.hidden()) end)
 local function colours()
     local p = palette() or {}
     p.foreground = look.text()
@@ -117,7 +135,61 @@ local function zoom(by: number?)
     size.value = if by == nil then SIZE_DEFAULT else math.clamp(g.untracked(function() return size.value end) + by, SIZE_MIN, SIZE_MAX)
 end
 
+-- What is done to a command: its output folded, copied, or the command
+-- written at the prompt again (not run: Return runs it).
+local function act(key: number, what: string)
+    local c = commands.find(key)
+    if c == nil then return end
+    if what == "fold" then
+        commands.toggle_fold(key)
+    elseif what == "copy" then
+        local text = commands.output_text(c)
+        if text ~= "" then clipboard:set_text(text) end
+    elseif what == "again" then
+        commands.stood.value = nil
+        term:scroll()
+        term:paste(c.text)
+    end
+end
+
+-- Standing on a command: Up and Down move, F folds, C copies its output,
+-- R writes it again, E shows only the failed ones; Escape, or anything
+-- else typed, leaves (and what was typed goes on).
+local function standing(name: string, mods: any): boolean
+    local stood = g.untracked(function() return commands.stood.value end)
+    if mods.ctrl and not mods.alt and (name == "Up" or name == "Down") then
+        commands.step(if name == "Up" then -1 else 1)
+        return true
+    end
+    if stood == nil then return false end
+    local lower = string.lower(name)
+    if mods.ctrl or mods.alt then
+        commands.stood.value = nil
+        return false
+    end
+    if name == "Up" or name == "Down" then
+        commands.step(if name == "Up" then -1 else 1)
+    elseif lower == "f" then
+        act(stood, "fold")
+    elseif lower == "c" then
+        act(stood, "copy")
+    elseif lower == "r" then
+        act(stood, "again")
+    elseif lower == "e" then
+        commands.failed_only.value = not g.untracked(function() return commands.failed_only.value end)
+    elseif name == "Escape" then
+        commands.stood.value = nil
+        term:scroll()
+    else
+        commands.stood.value = nil
+        term:scroll()
+        return false
+    end
+    return true
+end
+
 local function key(name: string, text: string?, mods: any)
+    if standing(name, mods) then return end
     local lower = string.lower(name)
     if mods.ctrl and not mods.alt then
         -- Ctrl+V pastes text; an image alone is the program's to take
@@ -174,13 +246,12 @@ local cursor = g.capsule {
     present = function()
         local c = term:cursor()
         local v = view()
-        local row = c.line - v.first
-        return c.shown and v.offset == 0 and row >= 0 and row < v.rows and v.cell_width > 0
+        return c.shown and v.cell_width > 0 and term:row(c.line) ~= nil
     end,
     offset_x = function() return PAD + term:cursor().column * view().cell_width end,
     offset_y = function()
         local v = view()
-        return PAD + (term:cursor().line - v.first) * v.cell_height
+        return PAD + (term:row(term:cursor().line) or 0) * v.cell_height
     end,
     width = function() return view().cell_width end,
     height = function() return view().cell_height end,
@@ -283,9 +354,24 @@ end
 -- Where the pointer last was, for the wheel, which is told it.
 local last_at = { 0, 0 }
 
+-- The command a row shows, for the pointer.
+local function command_at(row: number): number?
+    local line = term:line_at(row)
+    if line == nil then return nil end
+    for i = #commands.list, 1, -1 do
+        local c = commands.list[i]
+        local first, last = commands.span(c)
+        if first and last and line >= first and line <= last then
+            return if commands.ran(c) then c.key else nil
+        end
+    end
+    return nil
+end
+
 local function moved(x: number, y: number)
     local col, row = cell_at(x, y)
     last_at = { col, row }
+    capsules.hovered.value = command_at(row)
     if holding then return end
     term:mouse("move", 3, col, row, pointer_mods())
 end
@@ -330,6 +416,8 @@ return g.window {
             term:focus(on)
         end,
         on_wheel = wheel,
+        on_size = function(w: number, h: number) area.value = { w = w, h = h } end,
+        on_hover = function(on: boolean) if not on then capsules.hovered.value = nil end end,
         padding = PAD,
         g.terminal_view {
             terminal = term,
@@ -342,6 +430,12 @@ return g.window {
             on_move = moved,
             font = FONT,
             size = function() return size.value end,
+        },
+        capsules.new {
+            term = term,
+            pad = PAD,
+            width = function() return area.value.w - PAD * 2 end,
+            act = act,
         },
         cursor,
     },
