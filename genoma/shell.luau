@@ -8,6 +8,8 @@
 --                           FLOEMA_EXEC: what the first tab runs, a word a line)
 --   floema [folder] [-e command …]   the same, as installed (./floema)
 local g = require("@genoma")
+-- The app's own drawings, by name (ui/controls.luau's glyph: "icons/…").
+g.icon_dir(g.dir)
 local clipboard = require("@genoma/clipboard")
 local tabs = require("core/tabs")
 local config = require("core/config")
