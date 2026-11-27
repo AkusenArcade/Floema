@@ -1,0 +1,33 @@
+#!/bin/sh
+# Opens Floema: the Genoma app in FLOEMA_DIR (the package's by default).
+#
+#   floema [folder]                          a window, its first tab there
+#   floema --working-directory=<folder>      the same, as terminals are asked
+#   floema [-d|--dir <folder>]               the same
+#   floema [folder] -e <command> [args …]    the first tab runs the command,
+#                                            and closes when it ends
+#
+# Without a folder, where it was started from. GENOMA names another genoma
+# to run it with.
+dir="${FLOEMA_DIR:-/usr/share/floema}"
+cwd=
+run=
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --working-directory=*|--dir=*) cwd="${1#*=}" ;;
+        --working-directory|--dir|-d) shift; cwd="${1:-}" ;;
+        -e|-x|--) shift
+            for a in "$@"; do run="$run$a
+"; done
+            break ;;
+        -*) ;;
+        *) cwd="$1" ;;
+    esac
+    [ $# -gt 0 ] && shift
+done
+[ -n "$cwd" ] || cwd="$PWD"
+case "$cwd" in /*) ;; *) cwd="$PWD/$cwd" ;; esac
+# An IPC socket of its own: every window is a process, and none meets the
+# shell or the other Genoma apps.
+GENOMA_IPC="floema-$$" FLOEMA_CWD="$cwd" FLOEMA_EXEC="$run" \
+    exec "${GENOMA:-genoma}" "$dir"

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Floema
+GenericName=Terminal
+Comment=A terminal where every command is a living capsule, in Bioma's style
+Exec=floema
+Icon=dev.akusen.floema
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;cmd;terminal;
+StartupWMClass=dev.akusen.floema
+StartupNotify=true
+X-TerminalArgExec=-e
+X-TerminalArgDir=--working-directory=

@@ -4,57 +4,60 @@
 -- shells are core/tabs's.
 --
 --   genoma Floema/genoma   (FLOEMA_SHELL: the program, $SHELL otherwise;
---                           FLOEMA_CWD: the first tab's folder, home otherwise)
+--                           FLOEMA_CWD: the first tab's folder, home otherwise;
+--                           FLOEMA_EXEC: what the first tab runs, a word a line)
+--   floema [folder] [-e command …]   the same, as installed (./floema)
 local g = require("@genoma")
 local clipboard = require("@genoma/clipboard")
 local tabs = require("core/tabs")
+local config = require("core/config")
+local links = require("core/links")
 local capsules = require("ui/capsules")
 local cursor_ui = require("ui/cursor")
+local folder_commands = require("ui/folder_commands")
+local ask_paste = require("ui/ask_paste")
 local look = require("ui/look")
 local tab_row = require("ui/tabs")
+local settings_cell = require("ui/settings_cell")
 
 local PAD = 12
 local E, GAP = look.margin_edge, look.gap
--- Space Mono at 15 (Akusen, 2026-11-26); FLOEMA_FONT tries another, until
--- the theme file has one.
-local FONT = g.env("FLOEMA_FONT") or "Space Mono"
-local SIZE_DEFAULT, SIZE_MIN, SIZE_MAX = 15, 9, 32
-
--- What the person chose: ~/.config/floema/config.json. The size of the
--- letters is theirs to set (Akusen, 2026-11-26), and kept.
-local config_file = g.file {
-    path = (g.env("XDG_CONFIG_HOME") or ((g.env("HOME") or "") .. "/.config")) .. "/floema/config.json",
-    watch = false,
-}
-local kept: { [string]: any } = {}
-do
-    local text = config_file.text
-    if text then
-        local ok, parsed = pcall(g.parse_json, text)
-        if ok and type(parsed) == "table" then kept = parsed end
-    end
+-- The desktop's mono font (Bioma's Appearance writes it into the theme
+-- file), Space Mono without one (Akusen, 2026-11-26); FLOEMA_FONT tries
+-- another.
+local kit = require("@genoma/kit")
+local FONT_ASKED = g.env("FLOEMA_FONT")
+local function mono_font(): string
+    if FONT_ASKED and FONT_ASKED ~= "" then return FONT_ASKED end
+    local d = kit.theme.desktop()
+    local mono = d and d.fonts and d.fonts.mono
+    return if type(mono) == "string" and mono ~= "" then mono else "Space Mono"
 end
-local function valid_size(v: any): number?
-    return if type(v) == "number" then math.clamp(math.floor(v + 0.5), SIZE_MIN, SIZE_MAX) else nil
-end
+-- The size of the letters: the person's (core/config), or FLOEMA_SIZE for
+-- a run.
+local SIZE_ASKED = tonumber(g.env("FLOEMA_SIZE") or "")
 local area = g.signal({ w = 980, h = 620 })
-local size = g.signal(valid_size(tonumber(g.env("FLOEMA_SIZE") or "")) or valid_size(kept.font_size) or SIZE_DEFAULT)
-local saving: any = nil
-g.watch(function() return size.value end, function(v: number)
-    if kept.font_size == v or (kept.font_size == nil and v == SIZE_DEFAULT) then return end
-    kept.font_size = v
-    -- Ctrl+= held is one write, not ten.
-    if saving then saving:stop() end
-    saving = g.after(0.5, function()
-        saving = nil
-        config_file:write(g.to_json(kept, true))
-    end)
+local size = g.computed(function(): number
+    return if SIZE_ASKED then math.clamp(math.floor(SIZE_ASKED + 0.5), config.SIZE_MIN, config.SIZE_MAX) else config.get("font_size")
 end)
 local focused = g.signal(true)
 
--- The ANSI colours: Bioma's, as its Alacritty template writes them, until
--- Bioma writes them into the theme file (plan §4).
+-- The ANSI colours: the desktop's, from the theme file (Bioma writes them
+-- as its terminal templates derive them); without them, Bioma's Alacritty
+-- theme; without that, the terminal's own.
+local function desktop_palette(): { [string]: any }?
+    local d = kit.theme.desktop()
+    local t = d and d.terminal
+    if type(t) ~= "table" or type(t.colours) ~= "table" or #t.colours ~= 16 then return nil end
+    for _, c in t.colours do
+        if type(c) ~= "string" or g.colour.parse(c) == nil then return nil end
+    end
+    -- (The selection stays the primary's tint, as the plan has it.)
+    return { colours = table.clone(t.colours) }
+end
 local function palette(): { [string]: any }?
+    local from_desktop = desktop_palette()
+    if from_desktop then return from_desktop end
     local home = g.env("XDG_CONFIG_HOME") or ((g.env("HOME") or "") .. "/.config")
     local f = g.file { path = home .. "/alacritty/themes/bioma.toml", watch = false }
     local text = f.text
@@ -86,7 +89,10 @@ local function colours(term: any)
     p.selection = look.primary()
     term:palette(p)
 end
-g.watch(function() return look.background() .. look.text() .. look.primary() end, function()
+g.watch(function()
+    local d = desktop_palette()
+    return look.background() .. look.text() .. look.primary() .. (if d then table.concat(d.colours) else "")
+end, function()
     for _, t in g.untracked(function() return tabs.tabs.value end) do colours(t.term) end
 end)
 
@@ -107,10 +113,11 @@ local function notify(title: string, body: string, urgent: boolean?)
     if body ~= "" then table.insert(command, body) end
     pcall(function() g.process { command = command } end)
 end
--- A command that took long and ended where it was not seen.
-local LONG = 10
+-- A command that took long and ended where it was not seen: as long as the
+-- settings say (10 s unless changed; never, 0).
 tabs.on_finished = function(t: tabs.Tab, c: any, took: number)
-    if took < LONG or not unseen(t) then return end
+    local after = g.untracked(function() return config.get("notify_after") end)
+    if after <= 0 or took < after or not unseen(t) then return end
     local failed = c.code ~= nil and c.code ~= 0
     notify(if failed then `Failed, exit {c.code}` else "Done", c.text, false)
 end
@@ -157,10 +164,18 @@ local function screen(tab: tabs.Tab): any
 
     -- ---- Keys --------------------------------------------------------------------------
 
+    -- Several lines where the program does not take bracketed paste would
+    -- run line by line as they arrive: asked first (plan §2).
+    local asker: any = nil
     local function paste()
         if not clipboard.available then return end
         clipboard:read("text/plain;charset=utf-8", function(text: string?)
-            if text and text ~= "" then term:paste(text) end
+            if text == nil or text == "" then return end
+            if string.find(text, "\n", 1, true) and not term:modes().bracketed_paste and asker then
+                asker.ask(text)
+            else
+                term:paste(text)
+            end
         end)
     end
 
@@ -172,7 +187,7 @@ local function screen(tab: tabs.Tab): any
     end
 
     local function zoom(by: number?)
-        size.value = if by == nil then SIZE_DEFAULT else math.clamp(g.untracked(function() return size.value end) + by, SIZE_MIN, SIZE_MAX)
+        config.set("font_size", if by == nil then config.defaults.font_size else g.untracked(function() return config.get("font_size") end) + by)
     end
 
     -- What is done to a command: its output folded, copied, or the command
@@ -228,7 +243,28 @@ local function screen(tab: tabs.Tab): any
         return true
     end
 
+    -- The folder's commands: only where the shell waits at its prompt.
+    local panel: any = nil
+    local function at_prompt(): boolean
+        if tabs.busy(tab) or term:modes().alt_screen then return false end
+        local last = commands.list[#commands.list]
+        return last == nil or last.output == nil
+    end
+
     local function key(name: string, text: string?, mods: any)
+        if asker and asker.is_open() then
+            asker.key(name, text, mods)
+            return
+        end
+        if panel and panel.is_open() then
+            panel.key(name, text, mods)
+            return
+        end
+        if name == "space" and mods.ctrl and not mods.alt and not mods.shift and at_prompt() then
+            commands.stood.value = nil
+            panel.open()
+            return
+        end
         if standing(name, mods) then return end
         local lower = string.lower(name)
         if mods.ctrl and not mods.alt then
@@ -283,9 +319,42 @@ local function screen(tab: tabs.Tab): any
         pad = PAD,
         view = view,
         focused = function() return focused.value end,
-        font = FONT,
+        font = mono_font,
         size = function() return size.value end,
         bells = function() return bells_of(tab).value end,
+        trail = function() return config.get("cursor_trail") end,
+    }
+
+    -- The cursor's cell in the grid's box, and the box: where what grows
+    -- from the cursor grows, and the room it has.
+    local function cursor_cell(): { x: number, y: number, w: number, h: number }?
+        local c = term:cursor()
+        local v = view()
+        local row = term:row(c.line)
+        if row == nil or v.cell_width <= 0 then return nil end
+        return { x = PAD + c.column * v.cell_width, y = PAD + row * v.cell_height, w = v.cell_width, h = v.cell_height }
+    end
+    local function grid_room(): { w: number, h: number }
+        local v = view()
+        return { w = area.value.w, h = v.rows * v.cell_height + PAD * 2 }
+    end
+    local asker_node
+    asker_node, asker = ask_paste.new {
+        font = mono_font,
+        cursor = cursor_cell,
+        room = grid_room,
+        paste = function(text: string) term:paste(text) end,
+    }
+    local panel_node
+    panel_node, panel = folder_commands.new {
+        font = mono_font,
+        cursor = cursor_cell,
+        room = grid_room,
+        folder = function(): string return tab.cwd.value end,
+        choose = function(text: string)
+            term:scroll()
+            term:paste(text)
+        end,
     }
 
     -- ---- The pointer -------------------------------------------------------------------
@@ -309,11 +378,28 @@ local function screen(tab: tabs.Tab): any
         return if g.modifiers then g.modifiers() else {}
     end
 
+    -- What Ctrl+click opens, at a row and column of the view.
+    local function link_at(col: number, row: number): links.Link?
+        local line = term:line_at(row)
+        local text = if line then term:line(line) else nil
+        return if text then links.at(text, col) else nil
+    end
+    -- The link under the pointer while Ctrl is held: underlined.
+    local pointed = g.signal(nil :: { row: number, from: number, to: number }?)
+
     local function press(button: number, x: number, y: number)
         local col, row, right = cell_at(x, y)
         local b = BUTTONS[button]
         if b == nil then return end
         dragged = false
+        if b == 0 and pointer_mods().ctrl then
+            local l = link_at(col, row)
+            if l then
+                holding = nil
+                links.open(l, g.untracked(function() return tab.cwd.value end))
+                return
+            end
+        end
         if term:mouse("press", b, col, row, pointer_mods()) then
             holding, held_button = "program", b
             return
@@ -378,6 +464,13 @@ local function screen(tab: tabs.Tab): any
     local function moved(x: number, y: number)
         local col, row = cell_at(x, y)
         last_at = { col, row }
+        local l = if pointer_mods().ctrl then link_at(col, row) else nil
+        local was = g.untracked(function() return pointed.value end)
+        if l == nil then
+            if was then pointed.value = nil end
+        elseif was == nil or was.row ~= row or was.from ~= l.from or was.to ~= l.to then
+            pointed.value = { row = row, from = l.from, to = l.to }
+        end
         commands.hovered.value = command_at(row)
         if holding then return end
         term:mouse("move", 3, col, row, pointer_mods())
@@ -410,13 +503,13 @@ local function screen(tab: tabs.Tab): any
         g.terminal_view {
             terminal = term,
             grow = 1,
-            cursor = "text",
+            cursor = function() return if pointed.value then "pointer" else "text" end,
             on_press = press,
             on_drag = drag,
             on_release = release,
             on_click = click,
             on_move = moved,
-            font = FONT,
+            font = mono_font,
             size = function() return size.value end,
         },
         capsules.new {
@@ -428,6 +521,32 @@ local function screen(tab: tabs.Tab): any
             rate = function() return tab.rate.value end,
         },
         cursor,
+        -- The link Ctrl+click would open, underlined in the primary.
+        g.capsule {
+            overlay = true,
+            attach = "corner",
+            present = function() return pointed.value ~= nil end,
+            offset_x = function()
+                local p = pointed.value
+                return PAD + (if p then p.from else 0) * view().cell_width
+            end,
+            offset_y = function()
+                local p = pointed.value
+                return PAD + ((if p then p.row else 0) + 1) * view().cell_height - 2
+            end,
+            width = function()
+                local p = pointed.value
+                return (if p then p.to - p.from + 1 else 0) * view().cell_width
+            end,
+            height = look.thread,
+            crisp = true,
+            radius = 0,
+            fill = look.primary,
+            rim_top = look.CLEAR,
+            rim_bottom = look.CLEAR,
+        },
+        panel_node,
+        asker_node,
     }
 end
 
@@ -462,6 +581,10 @@ local function window_key(name: string, text: string?, mods: any)
             return
         end
     end
+    if name == "Escape" and g.untracked(function() return settings_cell.open.value end) then
+        settings_cell.open.value = false
+        return
+    end
     if t and name == "Escape" and g.untracked(function() return t.asking.value end) then
         t.asking.value = false
         return
@@ -476,8 +599,12 @@ local function window_wheel(dx: number, dy: number, steps: boolean): boolean
     return if h then h.wheel(dx, dy, steps) else false
 end
 
+-- The first tab: in the folder it was asked for, running what it was asked
+-- to run (`floema -e`: FLOEMA_EXEC, a word a line), the shell otherwise.
 local first_folder = g.env("FLOEMA_CWD")
-tabs.new(if first_folder and first_folder ~= "" then first_folder else nil)
+local first_run: { string } = {}
+for word in string.gmatch(g.env("FLOEMA_EXEC") or "", "[^\n]+") do table.insert(first_run, word) end
+tabs.new(if first_folder and first_folder ~= "" then first_folder else nil, first_run)
 
 -- Above the grid: the tabs, always, the one seen named by what runs in it
 -- or its folder. (The folder's path as capsules, ui/thread.luau, is left
@@ -528,5 +655,9 @@ return g.window {
             key = function(t: tabs.Tab) return t.id end,
             row = function(item: () -> tabs.Tab, _: any) return screen(g.untracked(item)) end,
         },
+        -- The foot, as Rizoma's: the grid ends above the settings' button,
+        -- nothing is read through it.
+        g.box { height = settings_cell.FOOT - PAD },
+        settings_cell.new(function() return area.value end),
     },
 }

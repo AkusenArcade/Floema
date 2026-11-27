@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9a865"/><stop offset="1" stop-color="#7a6236"/></linearGradient>
+    <linearGradient id="glyph" gradientUnits="userSpaceOnUse" x1="8.894" y1="0.409" x2="15.106" y2="23.591"><stop offset="0" stop-color="#f6e2ac"/><stop offset="1" stop-color="#d0a043"/></linearGradient>
+  </defs>
+  <circle cx="128" cy="128" r="120" fill="#2b2619" stroke="url(#rim)" stroke-width="5"/>
+  <g transform="translate(71 71) scale(4.75)" fill="none" stroke="url(#glyph)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<path d="M2.8 9.4 L6.4 12 L2.8 14.6"/><rect x="9.2" y="2.8" width="12" height="5.2" rx="2.6"/><rect x="9.2" y="9.4" width="12" height="5.2" rx="2.6" fill="url(#glyph)"/><rect x="9.2" y="16" width="12" height="5.2" rx="2.6"/>
+  </g>
+</svg>

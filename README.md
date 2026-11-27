@@ -10,10 +10,15 @@ Not another Alacritty clone: each command a capsule, what runs alive, tabs, a
 cursor that travels, the folder's commands a key away — with the keyboard
 layouts and dead keys Alacritty handles, and its speed.
 
-Status: a first prototype runs (one window, one shell): Genoma's g.pty,
-g.terminal and g.terminal_view under it. See [`docs/plan.md`](docs/plan.md)
-and the brainstorm it comes from, [`docs/questions.md`](docs/questions.md).
+Status: usable, not yet packaged. See [`docs/plan.md`](docs/plan.md) and the
+brainstorm it comes from, [`docs/questions.md`](docs/questions.md).
 
 ```
-genoma genoma/        # needs a Genoma with g.terminal (after 0.1.24)
+./install.sh          # ~/.local: floema, its desktop entry and icon
+./install.sh --here   # the same, running from this checkout
+floema [folder] [-e command …]
 ```
+
+It needs a Genoma with g.terminal (after 0.1.25). To make it the desktop's
+terminal, switch it on in its settings (the corner button); that needs
+`xdg-terminal-exec`.

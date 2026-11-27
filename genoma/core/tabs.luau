@@ -4,6 +4,7 @@
 -- home folder (Akusen, 2026-11-26); the last one closed closes the window.
 local g = require("@genoma")
 local commands = require("core/commands")
+local history = require("core/history")
 local paths = require("core/paths")
 
 local M = {}
@@ -80,10 +81,13 @@ local function remove(t: Tab)
     if #list == 0 then M.on_empty() end
 end
 
-function M.new(folder: string?): Tab
+-- `run`: a program to run in it instead of the shell (`floema -e …`); the
+-- tab closes when it ends.
+function M.new(folder: string?, run: { string }?): Tab
     count += 1
     local here = folder or paths.home
     local command, env = launch()
+    if run and #run > 0 then command = run end
     local t: any = {
         id = count,
         cwd = g.signal(here),
@@ -131,6 +135,9 @@ function M.new(folder: string?): Tab
                 if cwd then t.cwd.value = cwd end
             end
             if kind == "output" then
+                -- Kept with the folder it was typed in, for the folder's commands.
+                local c = t.commands.list[#t.commands.list]
+                if c and c.output == id then history.add(t.cwd.value, c.text) end
                 soon()
             elseif kind == "prompt" or kind == "done" then
                 read()

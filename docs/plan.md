@@ -1,6 +1,7 @@
 # Floema — plan
 
-Status: phases 0, 1 and 2 built, 2026-11-26 (§10, §11); phase 3 next. From the
+Status: phases 0 to 6 built, 2026-11-27 (§10 to §15); phase 7 prepared
+(§16), waiting for Genoma 0.1.26. From the
 brainstorm in `docs/questions.md` (Akusen's answers there are the source;
 this file only orders them). Pace: prototype first, the organic interface
 after.
@@ -174,7 +175,7 @@ Plus two small changes:
 
 ## 6. The folder's commands
 
-Called by a key (to be chosen; Ctrl+Space proposed), a panel grows from the
+Called by Ctrl+Space (Akusen, 2026-11-27), a panel grows from the
 cursor with what makes sense where the shell stands, read when it opens:
 
 - the project's own: `Makefile` targets, `package.json` scripts, `just`
@@ -402,3 +403,119 @@ new size with or without the keys.
   (the window without the keys, or another tab): a command that took more
   than 10 seconds and ended ("Done" or "Failed, exit N", the command), and
   what a program asks for (OSC 777, 9).
+- **What a program that took the window is left** (Akusen, 2026-11-27):
+  nothing. On the alternate screen (vim) no capsule is drawn; a command
+  whose line was drawn over (Claude Code) loses its thread too, running or
+  not: the program is the window, and a thread beside it would say nothing
+  it does not.
+
+## 14. Phase 5, as built (2026-11-27)
+
+- **The panel** (`ui/folder_commands.luau`): Ctrl+Space, only where the
+  shell waits at its prompt (nothing runs in the tab, no alternate screen;
+  otherwise the key is the program's). A cell grows from the cursor's cell
+  to the side of it with more room, and stays on that side while it is
+  open: filtering shrinks it towards the cursor. At its top what is typed
+  (a still caret) and the folder's name; below, the groups, each titled.
+  Every key is its own while it is open: typing filters (each word
+  somewhere in the command, any case), Backspace, Ctrl+Backspace or
+  Ctrl+U clear, Up/Down and Tab move (the list scrolls as little as it
+  takes), Return writes the command at the prompt (pasted, so not run:
+  Return there runs it), Escape, Ctrl+Space or a press beside it put it
+  away. The pointer chooses too.
+- **What it offers** (`core/folder_commands.luau`), read when it opens:
+  Make's targets (not special ones, patterns or variables), package.json's
+  scripts with the runner the lock file says (bun, pnpm, yarn, else npm),
+  just's recipes, cargo build / test (run where there is something to run),
+  `makepkg -si` beside a PKGBUILD, up to 8 of the folder's executables.
+  git from one `status --porcelain=v2 --branch`: `git commit -a` with
+  changes (`git add -A && git commit` when some are untracked), `git push`
+  when ahead, `git pull` when behind, `git status` when clean; the branch
+  in the group's title. The folder is given to the one `sh` that looks at
+  it as an argument, never written into the script.
+- **Run here** (`core/history.luau`): every command, as it starts, kept
+  with the folder it was typed in, in `$XDG_STATE_HOME/floema/history.json`
+  (mode 600: what was typed is the person's own); a command typed after a
+  space is not kept, as shells do. 100 a folder, the least used and oldest
+  dropped. The most used first, 8 before anything is typed, all of them to
+  a filter.
+- Verified in headless Umbriel (a probe pressing the keys): the groups
+  from a folder with all of them, filtering, the scroll following the keys,
+  the command written and not run, Escape; vim's screen bare and Ctrl+Space
+  given to it.
+
+## 15. Phase 6, as built (2026-11-27)
+
+- **Links** (`core/links.luau`): Ctrl+click on an address opens it with
+  xdg-open (`https://…`, `mailto:`, `www.…`); on a path (with a slash, from
+  `~`, or a name with an extension) it opens what is there, read from the
+  folder the shell stands in: a folder in Rizoma (where installed), a file
+  in the app of its kind; `file:12:5` as compilers write it is the file.
+  The word under the pointer is taken without the quotes, brackets and
+  punctuation around it. With Ctrl held, the link under the pointer is
+  underlined in the primary and the pointer is a hand. Path and folder
+  reach the shell that checks them as arguments, never in its script.
+- **Paste** (`ui/ask_paste.luau`): several lines where the program does not
+  take bracketed paste (cat, an old shell over ssh) would run line by line:
+  a small cell grows from the cursor, "Paste N lines?" and how the first
+  begins; Return or Paste pastes, Escape, Cancel or a press beside it does
+  not. Where bracketed paste is on (fish, vim, Claude Code) it pastes at
+  once.
+- **The mono font and the colours**: Genoma's theme file gains
+  `fonts.mono` and `terminal.colours` (16, as Bioma's terminal templates
+  derive them, `services/templates.luau` there); Bioma writes both
+  (`services/desktop_theme.luau`) and Settings → Appearance has a MONO row,
+  the monospaced families installed, each named in its own face (Bioma's
+  dropdown learned `rows` and `face`). Floema follows both live; without
+  them, Bioma's Alacritty theme, then the terminal's own. FLOEMA_FONT
+  still overrides for a run.
+- **Settings** (`ui/settings_cell.luau`, `core/config.luau`): Rizoma's
+  corner button and cell, with Floema's drawing (provisional: the icon is
+  chosen with Akusen in phase 7). Over a grid the button comes only when
+  the pointer nears the corner, or while the cell is open: at rest the
+  corner is the program's. Size (also Ctrl+= / - / 0), the cursor's
+  trail (off: it is where it goes at once), notifications after 10 s, 30
+  s, 1 min or never, and the default terminal.
+- **The default terminal** (`core/desktop.luau`): Rizoma's F4, Bioma's
+  launcher and keys, and every Genoma app ask for the terminal through
+  xdg-terminal-exec (Genoma's `apps:terminal`), which reads the terminals
+  preferred in `~/.config/xdg-terminals.list`. Switched on, Floema heads
+  that list; off, its line goes and the rest stays as written. Without
+  xdg-terminal-exec installed the switch says so: the desktop's terminal
+  is then `$TERMINAL`. A compositor key bound to a terminal by name
+  (niri's `spawn "alacritty"`) is the person's own config to change.
+- **Started as a terminal** (`floema`, `dev.akusen.floema.desktop`,
+  `install.sh`): `floema [folder]`, `--working-directory=`, `--dir`,
+  `-e command …` (the first tab runs it and closes when it ends); the
+  desktop entry says so to xdg-terminal-exec (`X-TerminalArgExec`,
+  `X-TerminalArgDir`). Each window its own IPC socket. `install.sh` as
+  Rizoma's: `~/.local`, a copy or `--here`.
+- Verified in headless Umbriel: the paste asked in cat and not at fish's
+  prompt; the settings cell; the switch writing the list (comments kept)
+  and taking Floema out again; `floema --working-directory=… -e sh -c …`
+  in the folder, the arguments whole, the window gone when it ended; the
+  link finder on addresses, paths, `file:12:5`, quotes and brackets; the
+  path check against names written to break out of the script. Bioma's
+  Appearance row seen offscreen (genoma snapshot).
+- **The settings' button** (Akusen, 2026-11-27): always there, as Rizoma's
+  in the same corner, the same button; the grid ends above it, as Rizoma's
+  folder does (`settings_cell.FOOT`). The first version, there only when
+  the pointer neared the corner, hid it.
+
+## 16. Phase 7, prepared (2026-11-27)
+
+- `packaging/aur/PKGBUILD` as Rizoma's: `genoma>=0.1.26` (the rate and the
+  cursor's shape are in Genoma's Unreleased), Space Mono shipped in
+  `/usr/share/fonts/floema` with its OFL (`assets/fonts`: the only package
+  of it, `ttf-space-mono-nerd`, is the family "SpaceMono Nerd Font", not
+  "Space Mono"); optional xdg-terminal-exec, rizoma, libnotify. Built with
+  makepkg from a local tarball: binary, entry, icon, fonts, both licences.
+  `install.sh` installs the font for the user where it is missing.
+- **The icon** (Akusen, 2026-11-27): C of the proposals in
+  `docs/drafts/icons/` — the prompt and the cursor with its trail, in a
+  capsule — drawn larger in its circle than Rizoma's glyph (scale 8.5, not
+  4.75), so that it reads at 24 and 32 px. The same drawing is the
+  settings' button (`genoma/icons/floema.svg`).
+- To publish: Genoma 0.1.26 on the AUR first; the repository public and
+  tagged `v1.0.0`.
+

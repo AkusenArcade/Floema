@@ -66,20 +66,22 @@ function M.new(t: { [string]: any }): any
         local _v = commands.version.value
         local folded = commands.folded.value
         local out: { Shown } = {}
+        -- A program that took the whole screen (vim, the alternate screen) is
+        -- the window: nothing is drawn over it.
+        if term:modes().alt_screen then return out end
         for i, c in commands.list do
-            local running = c.output ~= nil and c.done == nil
             local first, last = commands.span(c)
             -- Only what is in view is asked whether its line still says it.
             local seen = first ~= nil and last ~= nil and term:span(first, last) ~= nil
-            local intact = seen and commands.intact(c)
-            -- One whose line was drawn over is gone, unless it runs: then it
-            -- is its thread alone, from the top of the screen it took.
-            if seen and (commands.ran(c) or i == #commands.list and c.output) and (intact or running) then
-                if not intact and first then first = math.max(first, term.screen_line) end
+            -- One whose line was drawn over is gone, running or not: a program
+            -- that draws over the shell's lines (Claude Code) has the whole
+            -- window, and a thread beside it would tell nothing it does not
+            -- (Akusen, 2026-11-27).
+            if seen and (commands.ran(c) or i == #commands.list and c.output) and commands.intact(c) then
                 if first and last then
                     local top, bottom = term:span(first, last)
                     if top and bottom then
-                        local line = if intact then commands.line(c.command) else nil
+                        local line = commands.line(c.command)
                         local of, ot = commands.output_span(c)
                         table.insert(out, {
                             key = c.key,

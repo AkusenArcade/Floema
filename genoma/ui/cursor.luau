@@ -13,7 +13,8 @@ local look = require("ui/look")
 local M = {}
 
 -- `t`: term, pad (the grid's corner), view(), focused(), font, size(),
--- bells() (a count that grows with each bell: a ring leaves the cursor).
+-- bells() (a count that grows with each bell: a ring leaves the cursor),
+-- trail() (whether it travels; without, it is where it goes at once).
 function M.new(t: { [string]: any }): any
     local term, PAD = t.term, t.pad
     -- Where it should be, the cell's rectangle in the shape asked for:
@@ -47,8 +48,8 @@ function M.new(t: { [string]: any }): any
         local r = g.untracked(target)
         if r == nil then return end
         local goal = at(r)
-        -- Appearing, or from nowhere it was seen: at once.
-        if was == nil then
+        -- Appearing, from nowhere it was seen, or without a trail: at once.
+        if was == nil or (t.trail and not g.untracked(t.trail)) then
             for i, c in corners do
                 c[1]:set(goal[i][1])
                 c[2]:set(goal[i][2])
