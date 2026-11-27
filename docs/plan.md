@@ -1,7 +1,7 @@
 # Floema — plan
 
-Status: phases 0 to 6 built, 2026-11-27 (§10 to §15); phase 7 prepared
-(§16), waiting for Genoma 0.1.26. From the
+Status: v1 out, 2026-11-27: phases 0 to 7 (§10 to §16), on the AUR as
+`floema` 1.0.0. From the
 brainstorm in `docs/questions.md` (Akusen's answers there are the source;
 this file only orders them). Pace: prototype first, the organic interface
 after.
@@ -516,6 +516,8 @@ new size with or without the keys.
   capsule — drawn larger in its circle than Rizoma's glyph (scale 8.5, not
   4.75), so that it reads at 24 and 32 px. The same drawing is the
   settings' button (`genoma/icons/floema.svg`).
-- To publish: Genoma 0.1.26 on the AUR first; the repository public and
-  tagged `v1.0.0`.
+- **Published** (2026-11-27): Genoma 0.1.26 on the AUR first, then the
+  repository public (the font specimens, which showed private folder
+  names, taken out of its history first), tag `v1.0.0`, `floema` 1.0.0 on
+  the AUR.
 
