@@ -56,7 +56,7 @@ new line).
 - Fonts: Bioma's around the grid (Orbitron technical, Spectral names); in
   the grid a monospace **as close to Spectral as possible**; a third font,
   `mono`, added to the shared theme file so every Genoma app follows it.
-  Specimen of serif monospaces: `docs/drafts/fonts.png` (missing glyphs
+  A specimen of serif monospaces (not kept in the repository; missing glyphs
   there are drawn by Floema itself: box drawing and blocks built in, the
   rest from fallback fonts).
 - The folder's commands panel as proposed: the project's own commands
@@ -83,7 +83,7 @@ new line).
 
 - The serif monospaces of the first specimen do not convince him: a face
   that recalls analog typewriters instead. Second specimen:
-  `docs/drafts/fonts-typewriter.png` (Special Elite there is not a
+  not kept in the repository (Special Elite there is not a
   monospace: out).
 - Copy and paste as proposed: Ctrl+C copies with a selection, otherwise
   interrupts; Ctrl+V pastes text, and passes the key on when the clipboard
@@ -106,7 +106,7 @@ new line).
 - Font of the grid: Courier Prime, at first; in the grid it was hard to
   read. Lekton (the Olivetti one) and Sometype Mono did not convince either,
   nor Geist Mono and Monaspace Neon: **Space Mono at 15** (2026-11-26).
-  `docs/drafts/fonts-live.png`, `fonts-live-2.png`.
+  screenshots of the real grid (not kept in the repository).
 - **The size of the letters must be adjustable** (2026-11-26), and kept.
 13. A new tab opens in the home folder.
 14. Shells that survive the window: after v1.
